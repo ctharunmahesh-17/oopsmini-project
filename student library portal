@@ -1,0 +1,537 @@
+import javax.swing.*;
+import javax.swing.border.TitledBorder;
+import java.awt.*;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * -----------------------------------------------------------------
+ * MAIN PUBLIC CLASS (File must be named LibrarySystem.java)
+ * This class pre-loads all data and launches the main selector.
+ * -----------------------------------------------------------------
+ */
+public class LibrarySystem {
+
+    public static void main(String[] args) {
+        // --- 1. Create the ONE and ONLY Library database object ---
+        Library library = new Library();
+
+        // --- 2. Pre-load all data (Simulates admin's previous work) ---
+        preloadData(library);
+
+        // --- 3. Launch the main selector GUI ---
+        SwingUtilities.invokeLater(() -> {
+            MainSelector selector = new MainSelector(library);
+            selector.setVisible(true);
+        });
+    }
+
+    /**
+     * Helper method to fill the library with sample data.
+     */
+    private static void preloadData(Library library) {
+        // 1. Add Students
+        Student s1 = new Student(1, "Tharun Mahesh");
+        Student s2 = new Student(2, "Mohamed Shameer");
+        Student s3 = new Student(3, "Naveen");
+        library.addStudent(s1);
+        library.addStudent(s2);
+        library.addStudent(s3);
+
+        // 2. Add Books
+        Book b1 = new Book(101, "Java Programming", "John Doe");
+        Book b2 = new Book(102, "Data Structures", "Jane Smith");
+        Book b3 = new Book(103, "The Algorithm Design Manual", "Steven Skiena");
+        Book b4 = new Book(104, "Operating System Concepts", "Silberschatz");
+        Book b5 = new Book(105, "Clean Code", "Robert C. Martin");
+        library.addBook(b1);
+        library.addBook(b2);
+        library.addBook(b3);
+        library.addBook(b4);
+        library.addBook(b5);
+
+        // 3. Pre-issue some books
+        library.issueBook(b2, s1, LocalDate.now().plusDays(2)); // Due soon
+        library.issueBook(b5, s1, LocalDate.now().minusDays(3)); // OVERDUE
+        library.issueBook(b1, s2, LocalDate.now().plusDays(10));
+    }
+}
+
+/**
+ * -----------------------------------------------------------------
+ * GUI CLASS 1: MainSelector (The Launcher)
+ * This window lets you open the Admin or Student portal.
+ * -----------------------------------------------------------------
+ */
+class MainSelector extends JFrame {
+    private Library library;
+
+    public MainSelector(Library library) {
+        this.library = library;
+        setTitle("Library System");
+        setSize(400, 200);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+        setLayout(new GridLayout(2, 1, 10, 10));
+        ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        JButton adminButton = new JButton("Open Admin Portal");
+        adminButton.setFont(new Font("Arial", Font.BOLD, 16));
+        adminButton.addActionListener(e -> new AdminView(library).setVisible(true));
+
+        JButton studentButton = new JButton("Open Student Portal");
+        studentButton.setFont(new Font("Arial", Font.BOLD, 16));
+        studentButton.addActionListener(e -> new LoginView(library).setVisible(true));
+
+        add(adminButton);
+        add(studentButton);
+    }
+}
+
+/**
+ * -----------------------------------------------------------------
+ * GUI CLASS 2: AdminView (The Admin Portal)
+ * This is the NEW code you requested.
+ * -----------------------------------------------------------------
+ */
+class AdminView extends JFrame {
+    private Library library;
+
+    // Models for the JLists
+    private DefaultListModel<Student> studentModel = new DefaultListModel<>();
+    private DefaultListModel<Book> availableBookModel = new DefaultListModel<>();
+    private DefaultListModel<Book> issuedBookModel = new DefaultListModel<>();
+
+    // JLists
+    private JList<Student> studentList = new JList<>(studentModel);
+    private JList<Book> availableBookList = new JList<>(availableBookModel);
+    private JList<Book> issuedBookList = new JList<>(issuedBookModel);
+
+    // TextFields
+    private JTextField studentIdField = new JTextField(10);
+    private JTextField studentNameField = new JTextField(10);
+    private JTextField bookIdField = new JTextField(10);
+    private JTextField bookTitleField = new JTextField(10);
+    private JTextField bookAuthorField = new JTextField(10);
+    private JTextField dueDaysField = new JTextField("14", 5); // Default 14 days
+
+    public AdminView(Library library) {
+        this.library = library;
+        setTitle("Admin Portal - Library Management");
+        setSize(1000, 700);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Don't exit app, just close window
+        setLocationRelativeTo(null);
+
+        JPanel mainPanel = new JPanel(new GridLayout(1, 3, 10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        mainPanel.add(createStudentPanel());
+        mainPanel.add(createAvailableBookPanel());
+        mainPanel.add(createIssuedBookPanel());
+
+        add(mainPanel);
+        refreshAllLists();
+    }
+
+    private JPanel createStudentPanel() {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(new TitledBorder("Students"));
+        panel.add(new JScrollPane(studentList), BorderLayout.CENTER);
+
+        // Form to add new student
+        JPanel addStudentPanel = new JPanel(new GridLayout(3, 2, 5, 5));
+        addStudentPanel.setBorder(new TitledBorder("Add New Student"));
+        addStudentPanel.add(new JLabel("Student ID:"));
+        addStudentPanel.add(studentIdField);
+        addStudentPanel.add(new JLabel("Name:"));
+        addStudentPanel.add(studentNameField);
+        JButton addButton = new JButton("Add Student");
+        addStudentPanel.add(new JLabel()); // Spacer
+        addStudentPanel.add(addButton);
+
+        addButton.addActionListener(e -> addStudent());
+
+        panel.add(addStudentPanel, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private JPanel createAvailableBookPanel() {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(new TitledBorder("Available Books"));
+        panel.add(new JScrollPane(availableBookList), BorderLayout.CENTER);
+
+        // --- Bottom panel with two sections ---
+        JPanel southPanel = new JPanel(new GridLayout(2, 1, 5, 10));
+
+        // 1. Form to add new book
+        JPanel addBookPanel = new JPanel(new GridLayout(4, 2, 5, 5));
+        addBookPanel.setBorder(new TitledBorder("Add New Book"));
+        addBookPanel.add(new JLabel("Book ID:"));
+        addBookPanel.add(bookIdField);
+        addBookPanel.add(new JLabel("Title:"));
+        addBookPanel.add(bookTitleField);
+        addBookPanel.add(new JLabel("Author:"));
+        addBookPanel.add(bookAuthorField);
+        JButton addButton = new JButton("Add Book");
+        addBookPanel.add(new JLabel()); // Spacer
+        addBookPanel.add(addButton);
+        
+        // 2. Panel to issue a book
+        JPanel issuePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        issuePanel.setBorder(new TitledBorder("Issue Book"));
+        issuePanel.add(new JLabel("Days until due:"));
+        issuePanel.add(dueDaysField);
+        JButton issueButton = new JButton("Issue to Selected Student");
+        issuePanel.add(issueButton);
+
+        southPanel.add(addBookPanel);
+        southPanel.add(issuePanel);
+        panel.add(southPanel, BorderLayout.SOUTH);
+
+        addButton.addActionListener(e -> addBook());
+        issueButton.addActionListener(e -> issueBook());
+
+        return panel;
+    }
+
+    private JPanel createIssuedBookPanel() {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(new TitledBorder("Issued Books"));
+        panel.add(new JScrollPane(issuedBookList), BorderLayout.CENTER);
+
+        JButton returnButton = new JButton("Return Selected Book");
+        returnButton.setFont(new Font("Arial", Font.BOLD, 14));
+        panel.add(returnButton, BorderLayout.SOUTH);
+
+        returnButton.addActionListener(e -> returnBook());
+        return panel;
+    }
+
+    private void refreshAllLists() {
+        studentModel.clear();
+        availableBookModel.clear();
+        issuedBookModel.clear();
+
+        library.getAllStudents().forEach(studentModel::addElement);
+        library.getAvailableBooks().forEach(availableBookModel::addElement);
+        library.getIssuedBooks().forEach(issuedBookModel::addElement);
+    }
+
+    private void addStudent() {
+        try {
+            int id = Integer.parseInt(studentIdField.getText());
+            String name = studentNameField.getText();
+            if (name.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Student name cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            library.addStudent(new Student(id, name));
+            studentIdField.setText("");
+            studentNameField.setText("");
+            refreshAllLists();
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Invalid Student ID. Must be a number.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void addBook() {
+        try {
+            int id = Integer.parseInt(bookIdField.getText());
+            String title = bookTitleField.getText();
+            String author = bookAuthorField.getText();
+            if (title.isEmpty() || author.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Book title and author cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            library.addBook(new Book(id, title, author));
+            bookIdField.setText("");
+            bookTitleField.setText("");
+            bookAuthorField.setText("");
+            refreshAllLists();
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Invalid Book ID. Must be a number.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void issueBook() {
+        Student selectedStudent = studentList.getSelectedValue();
+        Book selectedBook = availableBookList.getSelectedValue();
+
+        if (selectedStudent == null || selectedBook == null) {
+            JOptionPane.showMessageDialog(this, "Please select a student AND an available book.", "Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        try {
+            int days = Integer.parseInt(dueDaysField.getText());
+            LocalDate dueDate = LocalDate.now().plusDays(days);
+            library.issueBook(selectedBook, selectedStudent, dueDate);
+            refreshAllLists();
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Invalid due days. Must be a number.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void returnBook() {
+        Book selectedBook = issuedBookList.getSelectedValue();
+        if (selectedBook == null) {
+            JOptionPane.showMessageDialog(this, "Please select an issued book to return.", "Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        library.returnBook(selectedBook);
+        refreshAllLists();
+    }
+}
+
+
+/**
+ * -----------------------------------------------------------------
+ * STUDENT PORTAL GUI (UNCHANGED from previous answer)
+ * -----------------------------------------------------------------
+ */
+class LoginView extends JFrame {
+    private Library library;
+    private JTextField studentIdField;
+    private JButton loginButton;
+
+    public LoginView(Library library) {
+        this.library = library;
+        setTitle("Student Portal Login");
+        setSize(350, 150);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setLocationRelativeTo(null);
+        setLayout(new FlowLayout(FlowLayout.CENTER, 10, 20));
+
+        add(new JLabel("Enter Student ID:"));
+        studentIdField = new JTextField(10);
+        add(studentIdField);
+
+        loginButton = new JButton("Login");
+        add(loginButton);
+        loginButton.addActionListener(e -> handleLogin());
+    }
+
+    private void handleLogin() {
+        try {
+            int studentId = Integer.parseInt(studentIdField.getText());
+            Student student = library.findStudentById(studentId);
+            if (student != null) {
+                StudentPortalView portal = new StudentPortalView(student, library);
+                portal.setVisible(true);
+                this.dispose(); 
+            } else {
+                JOptionPane.showMessageDialog(this, "Student ID not found.", "Login Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Invalid Student ID.", "Input Error", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+}
+
+class StudentPortalView extends JFrame {
+    private Student student;
+    private Library library;
+    private DefaultListModel<Book> availableBooksModel = new DefaultListModel<>();
+    private DefaultListModel<String> myBooksModel = new DefaultListModel<>(); // Use String for custom format
+    private JTextArea remindersArea = new JTextArea();
+
+    public StudentPortalView(Student student, Library library) {
+        this.student = student;
+        this.library = library;
+
+        setTitle("Student Portal - Welcome, " + student.getName());
+        setSize(800, 500);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        JPanel mainPanel = new JPanel(new GridLayout(1, 3, 10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // 1. Available Books Panel
+        JPanel availablePanel = new JPanel(new BorderLayout());
+        availablePanel.setBorder(new TitledBorder("Available Books in Library"));
+        JList<Book> availableBooksList = new JList<>(availableBooksModel);
+        availablePanel.add(new JScrollPane(availableBooksList), BorderLayout.CENTER);
+
+        // 2. My Issued Books Panel
+        JPanel myBooksPanel = new JPanel(new BorderLayout());
+        myBooksPanel.setBorder(new TitledBorder("My Issued Books"));
+        JList<String> myBooksList = new JList<>(myBooksModel);
+        myBooksPanel.add(new JScrollPane(myBooksList), BorderLayout.CENTER);
+
+        // 3. Reminders Panel
+        JPanel reminderPanel = new JPanel(new BorderLayout());
+        reminderPanel.setBorder(new TitledBorder("Reminders & Due Dates"));
+        remindersArea.setEditable(false);
+        remindersArea.setFont(new Font("Monospaced", Font.BOLD, 12));
+        reminderPanel.add(new JScrollPane(remindersArea), BorderLayout.CENTER);
+
+        mainPanel.add(availablePanel);
+        mainPanel.add(myBooksPanel);
+        mainPanel.add(reminderPanel);
+        add(mainPanel);
+
+        refreshLists();
+    }
+    
+    private void refreshLists() {
+        availableBooksModel.clear();
+        myBooksModel.clear();
+
+        library.getAvailableBooks().forEach(availableBooksModel::addElement);
+        
+        for (Book book : student.getIssuedBooks()) {
+            myBooksModel.addElement("'" + book.getTitle() + "' (Due: " + book.getDueDate() + ")");
+        }
+        
+        refreshReminders();
+    }
+
+    private void refreshReminders() {
+        remindersArea.setText(""); 
+        LocalDate today = LocalDate.now();
+        
+        if (student.getIssuedBooks().isEmpty()) {
+            remindersArea.setForeground(Color.BLACK);
+            remindersArea.setText("You have no books issued.");
+            return;
+        }
+
+        StringBuilder reminderText = new StringBuilder();
+        boolean overdue = false;
+        
+        for (Book book : student.getIssuedBooks()) {
+            if (book.getDueDate().isBefore(today)) {
+                reminderText.append("!! OVERDUE !!\n");
+                reminderText.append("  Title: " + book.getTitle() + "\n");
+                reminderText.append("  Due: " + book.getDueDate() + "\n\n");
+                overdue = true;
+            } else {
+                reminderText.append("  REMINDER\n");
+                reminderText.append("  Title: " + book.getTitle() + "\n");
+                reminderText.append("  Due: " + book.getDueDate() + "\n\n");
+            }
+        }
+        remindersArea.setText(reminderText.toString());
+        remindersArea.setForeground(overdue ? Color.RED : new Color(0, 100, 0)); // Red or dark green
+    }
+}
+
+
+/**
+ * -----------------------------------------------------------------
+ * MODEL CLASSES (Data Backend)
+ * -----------------------------------------------------------------
+ */
+class Book {
+    private int id;
+    private String title;
+    private String author;
+    private boolean isIssued = false;
+    private Student issuedTo = null;
+    private LocalDate dueDate = null;
+
+    public Book(int id, String title, String author) {
+        this.id = id;
+        this.title = title;
+        this.author = author;
+    }
+
+    public int getId() { return id; }
+    public String getTitle() { return title; }
+    public String getAuthor() { return author; }
+    public boolean isIssued() { return isIssued; }
+    public Student getIssuedTo() { return issuedTo; }
+    public LocalDate getDueDate() { return dueDate; }
+
+    public void setIssued(boolean issued) { isIssued = issued; }
+    public void setIssuedTo(Student student) { issuedTo = student; }
+    public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
+
+    /**
+     * This toString() is now used by the ADMIN portal JLists.
+     * It provides a different view depending on if the book is issued.
+     */
+    @Override
+    public String toString() {
+        if (isIssued) {
+            return "ID: " + id + " - '" + title + "' (Issued to: " + issuedTo.getName() + ")";
+        }
+        return "ID: " + id + " - '" + title + "' by " + author;
+    }
+}
+
+class Student {
+    private int studentId;
+    private String name;
+    private List<Book> issuedBooks = new ArrayList<>();
+
+    public Student(int studentId, String name) {
+        this.studentId = studentId;
+        this.name = name;
+    }
+
+    public int getStudentId() { return studentId; }
+    public String getName() { return name; }
+    public List<Book> getIssuedBooks() { return issuedBooks; }
+
+    public void issueBook(Book book) { issuedBooks.add(book); }
+    public void returnBook(Book book) { issuedBooks.remove(book); }
+
+    @Override
+    public String toString() {
+        return "ID: " + studentId + " - " + name;
+    }
+}
+
+class Library {
+    private List<Book> allBooks = new ArrayList<>();
+    private List<Student> allStudents = new ArrayList<>();
+
+    // --- Getters for Lists (Used by GUI) ---
+    public List<Student> getAllStudents() { return allStudents; }
+    
+    public List<Book> getAvailableBooks() {
+        return allBooks.stream()
+                .filter(book -> !book.isIssued())
+                .collect(Collectors.toList());
+    }
+    
+    public List<Book> getIssuedBooks() {
+        return allBooks.stream()
+                .filter(Book::isIssued)
+                .collect(Collectors.toList());
+    }
+
+    // --- Data Management (Used by Admin) ---
+    public void addBook(Book book) { allBooks.add(book); }
+    public void addStudent(Student student) { allStudents.add(student); }
+
+    public Student findStudentById(int id) {
+        return allStudents.stream()
+                .filter(s -> s.getStudentId() == id)
+                .findFirst()
+                .orElse(null);
+    }
+
+    // --- Core Operations (Used by Admin) ---
+    public void issueBook(Book book, Student student, LocalDate dueDate) {
+        if (book != null && student != null && !book.isIssued()) {
+            book.setIssued(true);
+            book.setIssuedTo(student);
+            book.setDueDate(dueDate);
+            student.issueBook(book);
+        }
+    }
+
+    public void returnBook(Book book) {
+        if (book != null && book.isIssued()) {
+            book.getIssuedTo().returnBook(book);
+            book.setIssued(false);
+            book.setIssuedTo(null);
+            book.setDueDate(null);
+        }
+    }
+}
